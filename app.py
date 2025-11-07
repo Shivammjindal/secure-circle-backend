@@ -1,10 +1,12 @@
 from ultralytics import YOLO
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, request
 import os
+import uuid
 from flask_cors import CORS
 import cv2
 import cloudinary
 import cloudinary.uploader
+from cloudinary import CloudinaryImage
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,6 +27,7 @@ def processingVideo(input_path, output_path):
     if fps == 0 or fps is None:
         fps = 30.0 
 
+
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     size = (width, height)
@@ -32,7 +35,6 @@ def processingVideo(input_path, output_path):
 
 
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     out = cv2.VideoWriter(output_path, fourcc, fps, size)
@@ -114,6 +116,7 @@ def revieve_video():
     output = processingVideo(video_path,upload_path)
 
     if not output:
+
         os.remove(video_path)
         os.remove(upload_path)
         return jsonify({'message':'an error occured'}), 500
@@ -121,15 +124,28 @@ def revieve_video():
     try:
 
         if not os.path.exists('./uploads/most_suspicious_frame.jpg'):
-            return jsonify({'message':'no kidnapping found'}), 200
+            os.remove(video_path)
+            os.remove(upload_path)
+            return jsonify({
+                'message':'no kidnapping found',
+                'status':False
+            }), 200
 
-        response = cloudinary.uploader.upload('./uploads/most_suspicious_frame.jpg')
-        
+        image_response = cloudinary.uploader.upload('./uploads/most_suspicious_frame.jpg')
+        public_id = image_response.get('public_id')
+
+        response = CloudinaryImage(public_id).build_url(
+            height=200, width=250
+        )
+
         os.remove(video_path)
         os.remove(upload_path)
         os.remove('./uploads/most_suspicious_frame.jpg')
 
-        return jsonify(response), 200
+        return jsonify({
+            'image_link': response,
+            'status': True
+        }), 200
     
     except Exception as e:
 
@@ -139,8 +155,70 @@ def revieve_video():
         return jsonify({
             'message':'unable to handle request'
         }), 500
+    
+@app.route('/recieve_image', methods=['POST'])
+def revieve_image():
 
+    try:
 
+        files = request.files
+        print('Request Form : ',request.form.get('title'))
+
+        if 'image' not in files:
+            return jsonify({'message':'no image input'}), 400
+        
+        image_file = request.files['image']
+        unique_id = uuid.uuid4()
+        image_path = os.path.join('./uploads', f'{unique_id}-{image_file.filename}')
+        image_file.save(image_path)
+
+        model = YOLO('best.pt')
+        result = model.predict(image_path)
+
+        annotated_frame = result[0].plot()
+        r = result[0]
+
+        for box in r.boxes:
+
+            cls_id = int(box.cls)
+            conf = round(float(box.conf) * 100, 1)
+
+            if r.names[cls_id] == 'Kidnap' and round(float(box.conf) * 100, 1) > 70:
+
+                print('exe')
+
+                output_path = f'processed-{image_file.filename.replace(" ","-")}'
+                cv2.imwrite(output_path,annotated_frame.copy())
+
+                image_response = cloudinary.uploader.upload(output_path)
+                public_id = image_response.get('public_id')
+
+                response = CloudinaryImage(public_id).build_url(
+                    height=200, width=250
+                )
+
+                os.remove(image_path)
+                return jsonify({
+                    'image_link': response,
+                    'status': True
+                }), 200
+
+        os.remove(image_path)
+        
+        return jsonify(
+            {
+                'message':'no vulnerebility found',
+                'status': False,
+            }
+        ), 200
+    
+    except Exception as e:
+
+        return jsonify(
+            {
+                'message':'internal server error'
+            }
+        ), 500
 
 if __name__ == "__main__":
 

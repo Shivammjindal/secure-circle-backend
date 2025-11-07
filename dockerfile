@@ -1,21 +1,12 @@
 FROM python:3.10-slim-bullseye AS builder
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        libgl1 \
-        libglib2.0-0 && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-WORKDIR /
+WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt --no-cache-dir
 
-COPY app.py app.py
-
-FROM python:3.10-slim-bullseye AS build
+FROM python:3.10-slim-bullseye
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -24,11 +15,12 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-WORKDIR /
+WORKDIR /app
 
-COPY --from=builder /usr/local/lib/python3.10 /usr/local/lib/python3.10
-COPY --from=builder /usr/local/bin /usr/local/bin
+COPY app.py .
 
-COPY --from=builder app.py app.py
+COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
+
+EXPOSE 5000
 
 CMD ["python", "app.py"]
