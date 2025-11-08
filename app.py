@@ -228,4 +228,4 @@ if __name__ == "__main__":
         api_secret = os.environ['CLOUDINARY_API_SECRET'],
     )
 
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port='5000',debug=True)

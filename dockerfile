@@ -17,7 +17,7 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-COPY app.py .
+COPY . .
 
 COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
 
